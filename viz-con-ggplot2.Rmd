@@ -1,0 +1,591 @@
+---
+title: "Viz con ggplot2"
+output: slidy_presentation
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, error = F, message = F)
+library(tidyverse)
+```
+
+# Paso 0
+
+Instala 
+
+```{r, eval = F}
+install.packages("ggplot2")
+install.packages("GDAdata")
+install.packages("gridExtra")
+install.packages("meta")
+```
+
+# Intro - Viz
+
+La graficación es una manera eficiente de resumir, y mostrar información. 
+Es fundamental entender el contexto de negocio y de la generación de los datos
+para tener más información con respecto a lo que se está graficando. 
+
+> John Tukey resume el propósito de la visualización de datos en cuatro frases: 
+>
+> 1. Las gráficas son para análsisis cualitativos o descriptivos y quizá semi cuantitativos, 
+nunca para análisis profundo cuantitativo (las tablas son mejores para esta tarea). 
+> 2. Las gráficas son para realizar comparaciones (en el tiempo, entre grupos), no para describir cantidades particulares. 
+> 3. Las gráficas son para impactar (visualmente, para sorprender, para transmitir 
+información), pero casi nunca sirven para reflejar patrones escondidos en los datos. 
+> 4. Las gráficas deberían de reportar un análisis de datos trabajado, fino y cuidadoso.
+Jamás deben de reemplazar el análisis. Las gráficas están para fortalecer el análisis, no para fundamentarlo y
+los gráficos finales en un análisis deben reflejar el análisis realizado. 
+
+
+# La gramática de las gráficas
+
+Es una herramienta que nos permite (Wickham, 2010)
+
+- Describir los componentes de una gráfica en forma concisa
+- Ir más allá de los nombres de la gráfica (e.g. scatterplot, boxplot, etc.)
+- Entender la estructura detrás de los gráficos estadísticos
+
+La gramática le da reglas al lenguaje y es un sistema formal para 
+generar enunciados.
+
+Proporciona una gramática para gráficos que
+permite describir y construir una gran cantidad de gráficos estadísticos.
+
+Wickham implementa esta gramática en el paquete `ggplot2` de `R`, como un sistema consistente para describir y construir gráficas.
+
+Para conocer los fundamentos teoricos de ggplot puedes ver "The Layered Grammar of Graphics", <http://vita.had.co.nz/papers/layered-grammar.pdf>
+
+Es parte del tidyverse, por lo que ya lo tienes instalado si realizaste `install.packages("tidyverse")`. Si quieres solo ggplot, debes instalar `install.packages("ggplot2")`.
+
+La implementación en capas, permite que los usuarios no se limiten únicamente a los gráficos específicos 
+que se implementan paquete a paquete sino que puedan realizar tantos gráficos 
+como este lenguaje de gráficos permita.
+
+# Base plotting vs. ggplot
+
+Observemos una gráfica utilizando la base `diamonds` en donde graficamos en el 
+eje $x$ el carataje de diamantes y en el eje $y$ su precio:
+
+```{r}
+data(diamonds, package = "ggplot2")
+str(diamonds)
+
+plot(diamonds$carat, diamonds$price)
+```
+
+Ese mismo gráfico, podemos realizarlo con la función `qplot` del paquete`ggplot`:
+
+```{r}
+qplot(data = diamonds, x = carat, y = price, geom = "point")
+```
+
+En donde especificamos que la variable `carat` en la base `diamonds` mapea al 
+eje $x$, la variable `price` en la misma base al eje $y$ y queremos que la
+geometría sea de puntos.
+
+Observa que la estética de la gráfica generada con la función `plot` es un poco
+distinta a la generada con `qplot` (función que utiliza `ggplot`). Verifica la 
+clase que tiene cada objeto, en el primer caso no tiene y en el segundo tenemos
+un objeto de clase `ggplot` que tiene atributos y que podemos guardar en un 
+objeto. 
+
+# ggplot
+
+Los componentes de la gramática de gráficas específica para `ggplot` son:
+
+1. Una o más capas donde cada cuál tiene:
+    a. Datos 
+    b. Mapeo estético de los datos (*aesthetic mappings*)
+    c. Un objeto geométrico
+    d. Una transformación estadística
+    e. Ajustes en las posiciones de los objetos
+2. Una escala para cada estética
+3. Un sistema de coordenadas
+4. Una especificación de facetas
+
+Al graficar en `ggplot` se tiene control sobre todos estos elementos:
+
+```{r, echo = T}
+ggplot() +
+  layer( # una capa
+    data = diamonds, # datos
+    mapping = aes(x = carat, y = price), # mapeo estético
+    geom = "point", # geometría
+    stat = "identity", # transformación estadística
+    position = "identity" # ajuste en posición de objetos
+    ) + 
+  scale_y_continuous() + # Escala para estética continua en y
+  scale_x_continuous() + # Escala para estética continua en x
+  coord_cartesian() # Sistema de coordenadas
+```
+
+`ggplot` implementa también una serie de `defaults` que facilitan la escritura
+de nuevas gráficas pues no es necesario especificar cada uno de los detalles al 
+agregar una capa. Por tanto, es posible escribir el mismo gráfico haciendo 
+uso de esos `defaults`:
+
+```{r}
+ggplot(diamonds, aes(carat, price)) + geom_point()
+```
+
+# Características importantes
+
+Los componentes de una gráfica son ortogonales:
+
+    - Cambiar uno no debe romper los otros
+    - Una configuración distinta de componentes es válida
+    - Puedes construir mayor complejidad agregando capas
+    
+# Las capas
+
+`ggplot` produce un objeto que se puede convertir en una gráfica. Es decir, `R` 
+sabe cómo convertirlo en una gráfica.
+
+Este objeto está formado por capas, mismas que tienen sus entradas (*inputs*) particulares
+y que comparten argumentos del gráfico `base` generado por la función `ggplot()`. 
+Con el operador
+`+` se van agregando las distintas capas al mismo objeto.
+
+Así como en otros casos, el objeto en `R` puede ser guardado en una variable, se
+le puede imprimir, se le puede guardar como imagen de diferentes formatos, o se
+puede guardar en una lista o en un `Rdata`.
+
+## Componentes de una capa
+
+### Datos y mapa estético
+
+Permite mapear las columnas del `data.frame` de entrada a los aspectos de la gráfica.
+
+Es decir,
+
+- las coordenadas $x$, $y$
+- los grupos (definidos por otra variable)
+- el tamaño
+- el color
+- el relleno 
+
+Para ejemplificar, generamos una variable $x$ que proviene de dos distribuciones
+normales: mil realizaciones $N(0, 1)$ y mil $N(3, 1)$. Asignamos un grupo a 
+las primeras mil y otro a la segunda.
+
+```{r}
+mix2norm <- data.frame(x  = c(rnorm(1000), rnorm(1000, 3)), 
+                       grupo = as.factor(rep(c(1,2),each=1000)))
+
+ggplot(mix2norm, aes(x=x, color = grupo)) + geom_density()
+```
+
+### Transformaciones estadísticas
+
+Ésta puede ser, por ejemplo, un resumen de la entrada (*input*) recibido; se especifica 
+vía el comando `stat`. Ejemplos:
+
+- binning
+- smoothing
+- boxplot
+- identity
+
+Utilizamos, por ejemplo, la transformación *bin*, misma que se especifica en 
+el objeto geométrico:
+
+```{r}
+ggplot(mix2norm, aes(x=x, color = grupo)) + 
+  geom_density(stat = "bin", binwidth = 0.1)
+```
+
+La transformación utilizada tiene asociada parámetros como lo es el tamaño en el
+que deben realizarse los colapsos de la variable categórica (*binwidth*).
+
+### El objeto geométrico
+
+Esto permite especificar el tipo de gráfico a crear. Se especifica con la
+`geom`. Se define de acuerdo a su dimensión, es decir,
+
+- `0-dim`: puntos, texto
+- `1-dim`: líneas
+- `2-dim`: polígonos, intervalos
+
+Otras geometrías incluyen:
+
+- `geom_hist`
+- `geom_bar`
+- `geom_contour`
+- `geom_line`
+- `geom_density`
+
+Además, se puede cambiar la transformación estadística manteniendo la geometría
+fijada. Al ejemplo anterior, le agregamos una transformación estadística dentro
+del objeto geométrico con el parámetro `adjust`.
+
+```{r}
+ggplot(mix2norm, aes(x = x, color = grupo)) + geom_density(adjust = 1/2)
+```
+
+En este caso, estamos pidiendo la mitad del tamaño del bin que se calcula en forma
+algorítmica por el paquete. 
+
+Viceversa, puede cambiarse la geometría pero mantener la transformación estadística.
+
+```{r}
+ggplot(mix2norm, aes(x = x, color = grupo)) + stat_density(adjust = 1/2)
+```
+
+# Ejercicio - Diamonds
+
+```{r}
+diamonds
+```
+
+1. Genera una gráfica con la función `ggplot` en donde los datos sea
+la base `diamonds` y la estética sea $x = price$. Especifica como geometría
+una densidad usando `+ stat_density()`.
+
+2. Cambia el color y el relleno de la geometría a gris (`grey50`).
+
+Dentro de stat_density especifica `fill = "grey50"`. Haz lo mismo para especificar `color` dentro de `stat_density`.
+
+3. Cambia la geometría a `ribbon`, cambiando `stat_density` de la siguiente forma:
+
+`stat_density(aes(ymax = ..density..,  ymin = -..density..),
+    fill = "grey50", colour = "grey50",
+    geom = "ribbon", position = "identity")`
+
+4. Agrega una faceta para que se haga un gráfico para cada uno de los subconjuntos
+definidos por la variable `cut`.
+
+`facet_grid(. ~ cut)`
+
+5. Agrega a la gráfica el comando `coord_flip` para que el precio este
+en el eje $y$.
+
+
+
+```{r, eval = F}
+# Respuestas
+
+```
+
+# Especificaciones adicionales
+
+## Posición
+
+Es posible especificar la posición de cada una de las capas en relación a otras. 
+Ejemplos:
+
+- `dodge`
+- `identity`
+- `jitter`
+
+
+```{r}
+ggplot(mix2norm, aes(x=x, color = grupo)) + 
+  stat_density(adjust=1/2, size=2, position = "identity", geom = "line")
+```
+
+## Escalas
+
+Determina cuál valor de entrada mapea a qué estética específica. Se escribe 
+usando `scale`. Hay de todo:
+
+- `continous`
+- `logarithmic`
+- `values to shapes`
+- `what limits`
+- `what labels`
+- `what marks`
+
+
+```{r}
+ggplot(mix2norm, aes(x=x, color = grupo)) + 
+  stat_density(adjust=1/2, size=2, position ="identity", geom ="line") +
+  scale_y_log10(limits = c(1e-5,1))
+```
+
+## Coordenadas
+
+Te permite especificar las posiciones de las cosas y cómo mapean a las posiciones 
+en la pantalla. Antes todo era entorno a cómo le dices las cosas a `R` pero 
+también importa cómo las ves. Coordenadas distintas pueden afectar a los objetos
+geométricos. Ejemplos:
+
+- `cartesian`
+- `polar`
+- `map-projection`
+
+```{r}
+ggplot(mix2norm, aes(x = x, color = grupo)) + 
+  stat_density(adjust = 1/2, size = 2, position = "identity", geom = "line") +
+  coord_polar()
+```
+
+## Facetas
+
+Permite arreglar diferentes gráficas en un grid o panel.
+
+```{r}
+ggplot(mix2norm, aes(x = x, color = grupo)) + 
+  stat_density(adjust = 1/2, size = 2, position = "identity", geom = "line") +
+  facet_grid(grupo ~ .)
+```
+
+Ve el help de `facet_wrap`
+
+# Ejercicio - iris
+
+```{r}
+iris
+```
+
+1. Realiza un histograma de `Petal.Length`.
+2. Realiza una grafica de puntos con `Petal.Length` en el eje x y `Petal.Width` en el eje y. 
+3. Usa la grafica en 2 y agrega la variable `species` como color en la estetica. 
+4. Cambia la posicion de la leyenda abajo del grafico. Hint: agrega `theme`, con el parametro `legend.position = 'bottom')`.
+
+
+```{r}
+## Respuestas
+
+```
+
+# Variables continuas
+
+hay muchas maneras de visualizar variables continuas. 
+
+Nos enfocaremos en dos: 
+
+* Boxplots (Diagrama de caja y brazo)
+* Histogramas
+
+## Características a buscar
+
+* **Asimetría**
+Distribuciones simétricas o sesgadas hacia algún lado (distribuciones de ingreso).
+* ***Outliers***
+Valores que están muy lejanos al resto de las observaciones, ojo estos pueden contener información valiosa. 
+* **Multimodalidad**
+En caso que haya más de una "joroba" en la distribución de los valores. 
+* **Gaps**
+Puede ser natural que no haya un área del rango de las variables (calificaciones de exámenes).
+* **Amontonamiento (heaping)**
+Hay veces que por facilidad los valores se acumulan en un mismo valor particular, o especial. (Hora denuncias)
+* **Redondeo**
+Registro de valores redondeados (edad)
+* **Imposibles**
+Registro de valores que no son posibles (Edades negativas)
+* **Errores**
+Registro incorrecto de valores. (edades de 99 anyone ¿?)
+
+Las visualizaciones como los histogramas y los boxplots nos ayudan a entender estas características, sin embargo reitero que se requiere también un análisis estadístico de los valores. 
+
+De las estadísticas que describen a una vriable probablemente la media es la medida más común y usada para describir los valores, y usualmente para hacer comparaciones de medias se usa bastante la prueba $t$. La prueba $t$ depende del supuesto que la variable es normal, aunque este supuesto no es tan riguroso y hay maneras de datle la vuelta; esto es para explicar el hecho que también hay que hacer pruebas de normalidad (léase qq-plots, por ejemplo). 
+
+## Ejemplos - datos de Pima
+
+```{r}
+library(gridExtra)
+data(Pima.tr2, package="MASS")
+tbl_df(Pima.tr2)
+```
+
+### Histograma
+
+```{r}
+h1 <- ggplot(Pima.tr2, aes(glu)) + geom_histogram()
+h2 <- ggplot(Pima.tr2, aes(bp)) + geom_histogram()
+h3 <- ggplot(Pima.tr2, aes(skin)) + geom_histogram()
+h4 <- ggplot(Pima.tr2, aes(bmi)) + geom_histogram()
+h5 <- ggplot(Pima.tr2, aes(ped)) + geom_histogram()
+h6 <- ggplot(Pima.tr2, aes(age)) + geom_histogram()
+grid.arrange(h1, h2, h3, h4, h5, h6, nrow=2)
+```
+
+
+Las distribuciones de variables plasma, presión arterial y bmi parecen ser simétricas, *skin* tiene algunos outliers, la distribucion de *ped* se ve sesgada y con algunos outliers. Podemos ver también que los grupos de edad son jóvenes. 
+
+### Boxplot
+
+```{r}
+library(dplyr)
+PimaV <- select(Pima.tr2, glu:age) %>%
+  gather(key = "variable", value = "valor")
+
+ggplot(PimaV, aes(x = variable, y = valor)) + 
+  geom_boxplot() +
+  xlab("") + ylab("")
+
+# Cambiamoso el color, forma y tamano de los outliers
+ggplot(PimaV, aes(x = variable, y = valor)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4) +
+  xlab("") + ylab("") 
+```
+
+## Datos de Pearson
+
+Tomaremos los datos de Karl Pearson, que contiene 1078 alturas apareadas de padres e hijos. Grafiquémoslos en histogramas para entender cómo se ven y en este caso nos interesará la normalidad de las variables.
+
+### Histogramas y densidades
+
+```{r}
+data(father.son, package="UsingR")
+c2 <- ggplot(father.son, aes(sheight)) + 
+             geom_histogram(aes(y = ..density..), binwidth=1) +
+             geom_density() + xlim(58, 80) + ylim(0, 0.16) +
+             xlab("ht (inches)") + ylab("") + ggtitle("Sons")
+p2 <- ggplot(father.son, aes(fheight)) + 
+             geom_histogram(aes(y = ..density..), binwidth=1) +
+             geom_density() + xlim(58, 80) + ylim(0, 0.16) +
+             xlab("ht (inches)") + ylab("") +
+             ggtitle("Fathers")
+grid.arrange(c2, p2, nrow = 1)
+
+ggplot(father.son %>% gather(key = "variable", value = "altura"), aes(altura, color = variable)) + 
+             # geom_histogram(aes(y = ..density..), binwidth=1) +
+             geom_density() + xlim(58, 80) + ylim(0, 0.16) +
+             xlab("ht (inches)") + ylab("") + theme_bw()
+```
+
+### qq-plot
+
+```{r}
+with(father.son, {
+     qqnorm(sheight, main="Sons", xlab="",
+            ylab="", pch=16, ylim=c(55,80))
+     qqline(sheight)
+     qqnorm(fheight, main="Fathers", xlab="",
+            ylab="", pch=16, ylim=c(55,80))
+     qqline(fheight)})
+```
+
+# Variables categoricas
+
+## Barras
+
+Experimento de uso de aspirinas después de un infarto a miocardio para detener la muerte de los pacientes. 
+
+```{r}
+data(Fleiss93, package="meta")
+Fleiss93 <- within(Fleiss93, {
+                   total <- n.e + n.c
+                   st <- reorder(study, -(total)) })
+ggplot(Fleiss93, aes(st, total)) + geom_bar(stat="identity") +
+       xlab("") + ylab("") + ylim(0,20000)
+
+```
+
+Un experimento contiene una concentración muy importante de los experimentos por lo que si agrupamos todos los que contengan menos de 2000 individuos, tenemos el siguiente gráfico:
+
+```{r}
+
+Fleiss93 <- within(Fleiss93, st1 <- as.character(study) )
+Fleiss93 <- Fleiss93 %>% mutate(st1 = ifelse(total>2000,st1, "REST"))
+ggplot(Fleiss93, aes(st1, total)) + geom_bar(stat="identity") +
+       xlab("") + ylab("") + ylim(0,20000)
+```
+
+Si agrupamos todos los estudios menores a 2000 individuos, se tiene otro tipo de visualización mucho más clara y también se entiende bastante claramente el hecho que el experimento ISIS-2 contiene mucha más poblacioón que todos los demás.
+
+## Titanic
+
+Tener escalas iguales importa
+
+si hacemos los distintos gráficos a misma escala con distintas vriables tenemos una historia más interesante que sólo el conteo de muertes: 
+
+```{r}
+library(gridExtra)
+Titanic1 <- data.frame(Titanic)
+
+p <- ggplot(Titanic1, aes(weight=Freq)) +
+            ylab("")
+cs <- p + aes(Class) + geom_bar(fill="blue")
+sx <- p + aes(Sex) + geom_bar(fill="green")
+ag <- p + aes(Age) + geom_bar(fill="tan2")
+su <- p + aes(Survived) + geom_bar(fill="red")
+grid.arrange(cs, sx, ag, su, nrow=1, widths=c(3, 2, 2, 2))
+
+p <- ggplot(Titanic1, aes(weight=Freq)) +
+            ylab("") + ylim(0,2250)
+cs <- p + aes(Class) + geom_bar(fill="blue")
+sx <- p + aes(Sex) + geom_bar(fill="green")
+ag <- p + aes(Age) + geom_bar(fill="tan2")
+su <- p + aes(Survived) + geom_bar(fill="red")
+grid.arrange(cs, sx, ag, su, nrow=1, widths=c(3, 2, 2, 2))
+```
+
+
+# Ejercicio - SKI
+
+```{r}
+data(SpeedSki, package = "GDAdata")
+tbl_df(SpeedSki)
+```
+
+1. Utiliza la grafica base
+
+`ggplot(SpeedSki, aes(x=Speed, fill=Sex)) + 
+       geom_histogram()`
+       
+Revisa el warning. Cambia el binwidth para que deje de mostrarte una advertencia.
+
+2. Cambia los limites de la grafica agregando `xlim` y definiendo un dominio.
+
+3. Agrega etiquetas al eje x y y (usa `xlab` y `ylab`)
+
+4. Agrega una faceta para la variable `Sex`.
+
+5. Elimina la leyenda.
+
+6. Haz un `facet_grid` con las variables `Sex` y `Event`.
+
+```{r}
+## Respuestas
+
+```
+
+# Extra
+
+## Líneas y suavizado. 
+
+```{r}
+data(Cars93, package="MASS")
+ggplot(Cars93, aes(Weight, MPG.city)) + geom_point() +
+       geom_smooth(colour="green") + ylim(0,50)
+```
+
+Vemos cómo conforme aumenta el peso las millas por galón tieneden a disminuír, (autos más grandes usan más combustible)
+
+## Alturas de las personas
+
+```{r}
+data(father.son, package="UsingR")
+ggplot(father.son, aes(fheight, sheight)) + geom_point() +
+       geom_smooth(method="lm", colour="red") +
+       geom_abline(slope=1, intercept=0)
+```
+
+Esto nos ayuda a ver que puede que haya una buena relacioń entre las variables, por lo que pintamos la línea $y=x$, para comparar. Ahora, veamos 
+
+```{r}
+data(father.son, package="UsingR")
+ggplot(father.son, aes(fheight, sheight)) + geom_point() +
+       geom_smooth(method="lm", colour="red", se=FALSE) +
+       stat_smooth()
+```
+
+## Grupos de categorías
+
+Filtremos por grupos de atletas, hombres y mujeres. 
+
+```{r}
+data(oly12, package="VGAMdata")
+ggplot(oly12, aes(Height, Weight)) + geom_point() +
+       ggtitle("Athletes at the London Olympics 2012")
+ggplot(oly12, aes(Height,Weight))+geom_point(size=1)+facet_wrap(~Sex,ncol=1)
+```
+
+```{r}
+oly125 <- mutate(oly12,Sport=abbreviate(Sport,12))
+ggplot(oly12, aes(Height,Weight))+geom_point(size=1)+facet_wrap(~Sport)
+```

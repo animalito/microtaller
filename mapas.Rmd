@@ -1,0 +1,130 @@
+---
+title: "Mapas"
+output: slidy_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, error = F, message = F, warning = F)
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(scales)
+library(maptools)
+library(rgdal)
+library(ggmap)
+library(gridExtra)
+library(mapproj)
+```
+
+# Instalamos 
+
+```{r, eval = F}
+install.packages('rgeos', type='source')
+install.packages('rgdal', type='source')
+install.packages("mapproj")
+```
+
+Usamos la función readOGR para leer los archivos de estados.
+
+```{r}
+edo_shp <- readOGR("shapes" , "Estados")
+```
+
+
+```{r}
+class(edo_shp)
+```
+
+Lo podemos graficar directamente con plot.
+
+```{r}
+plot(edo_shp)
+```
+
+Para poder graficarlo en ggplot debemos convertirlo en un dataframe.
+
+Formamos el data frame (con fortify) que convierte los polígonos en 
+puntos, les asigna el id (NOM_ENT) correspondiente, y asigna también un 
+_grupo_ que indica  a que polígono corresponde cada punto.
+
+```{r}
+edo_df <- fortify(edo_shp, region = "NOM_ENT")
+class(edo_df)
+head(edo_df)
+```
+
+Ya estamos listos para graficar, usaremos la geometría polígono.
+
+```{r}
+ggplot(data = edo_df, aes(long, lat, group=group)) + 
+  geom_polygon(colour='darkgrey', fill='white') +
+  coord_map(projection="mercator") +
+  theme_nothing()
+```
+
+# Añadir variables al mapa
+
+Nuestro objetivo final es hacer mapas para representar una variable, veamos
+como haríamos para representar el índice de carencias que creamos en la tarea.
+
+```{r}
+library(Hmisc)
+
+conapo <- read.csv("data/indice_carencias.csv", stringsAsFactors=FALSE)
+
+conapo$CVE <- read.table("data/conapo_2010.csv", header=TRUE, quote="\"", 
+  stringsAsFactors=FALSE, colClasses = "character")$CVE
+
+# Creamos una variable categórica
+conapo <- mutate(conapo, indice_cat = cut2(PC1, 5))
+indice <- select(conapo, indice = PC1, indice_cat, CVE)
+
+centro <- indice$CVE[conapo$NOM_ABR %in% c("DF", "Mex.", "Mor.")]
+
+mun_shp <- readOGR("shapes" , "municipios_ligero")
+names(mun_shp)
+mun_shp@data$CVE <- paste(as.character(mun_shp@data$CVE_ENT), 
+  as.character(mun_shp@data$CVE_MUN), sep = "")
+
+mun_df <- fortify(mun_shp, region = "CVE")
+```
+
+Para incluirlas en el mapa añadimos las variables de interés a la base de datos
+mun_df. Para este ejemplo graficaremos únicamente una región. Podemos crear
+el subconjunto directamente del objeto _SpatialPolygonsDataFrame_ pero en 
+este ejemplo filtraremos la base de datos _data.frame_.
+
+```{r}
+indice <- indice %>% mutate(CVE = stringr::str_pad(CVE, 5, side = "left", pad = "0"))
+mun_ind <- mun_df %>%
+  mutate(CVE = id) %>%
+  left_join(indice) %>% 
+  filter(CVE %in% centro)
+
+ggplot() + 
+  geom_polygon(data = mun_ind, aes(long, lat, group = group, fill = indice)) +
+  labs(title = "Índice de carencias", fill = "Índice") +
+  coord_fixed()
+```
+
+En el siguiente mapa los colores son a nivel municipio pero dibujamos las 
+fronteras a nivel estado para evitar que los bordes opaquen los datos.
+```{r}
+mun_shp_2 <- spTransform(mun_shp, CRS("+proj=longlat +datum=WGS84"))
+
+mun_df <- fortify(mun_shp_2, region = "CVE")
+mun_ind <- mun_df %>%
+  mutate(CVE = id) %>%
+  left_join(indice)
+
+ggplot() + 
+  geom_polygon(data = mun_ind, aes(long, lat, group = group, fill = indice)) +
+  geom_polygon(data = edo_df, aes(x = long, y = lat, group = group),
+    fill = NA, color = "darkgray", size = 0.25) +
+  labs(title = "Índice de carencias", fill = "Índice") +
+  theme_nothing(legend = TRUE) + #fondo blanco
+  guides(fill = guide_legend(reverse = TRUE)) +
+  scale_fill_distiller(palette = "GnBu", breaks = pretty_breaks(n = 10)) + #paleta 
+  coord_map()
+```
+
